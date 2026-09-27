@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ลงเวลา</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<!--
+  camera.html — หน้า LIFF ลงเวลาด้วยกล้องสดเท่านั้น
+  - ไม่มี <input type="file"> และไม่ใช้ capture attribute: ถ่ายได้จากกล้องสด (getUserMedia) อย่างเดียว
+  - เวลาที่บันทึกใช้เวลาฝั่ง server ตอนกดส่ง ไม่ใช้เวลามือถือ
+  - ไม่ใช้ GPS
+  โฮสต์ใน Apps Script: ไม่ต้องแก้อะไร (ค่าใน data-* ถูกเติมให้อัตโนมัติ)
+  โฮสต์ที่อื่น (แผนสำรอง): แก้ data-liff-id และ data-api-url ใน <body> ให้เป็นค่าจริง
+-->
+<style>
+  :root {
+    --navy: #1B2F7A;
+    --navy-deep: #12205A;
+    --yellow: #FFC72C;
+    --paper: #F5F6FA;
+    --ink: #172033;
+    --muted: #5B6480;
+    --ok: #1E8E5A;
+    --bad: #B8322A;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "IBM Plex Sans Thai", "Sukhumvit Set", "Noto Sans Thai", system-ui, sans-serif;
+    background: var(--navy-deep);
+    color: var(--ink);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app { min-height: 100%; display: flex; flex-direction: column; max-width: 520px; margin: 0 auto; }
+
+  header { color: #fff; padding: 16px 20px 12px; }
+  header .who { font-size: 15px; opacity: .85; min-height: 1.4em; }
+  header h1 { margin: 2px 0 0; font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+
+  .stage { position: relative; margin: 0 16px; border-radius: 22px; overflow: hidden; background: #000; aspect-ratio: 3 / 4; }
+  .stage video, .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .stage video { transform: scaleX(-1); }            /* แสดงแบบกระจกให้จัดท่าง่าย (รูปที่ส่งไม่กลับด้าน) */
+  .guide { position: absolute; left: 50%; top: 42%; width: 58%; aspect-ratio: 3 / 4; transform: translate(-50%, -50%);
+           border: 3px dashed rgba(255, 199, 44, .9); border-radius: 50%; pointer-events: none; }
+  .hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 14px; color: #fff; font-size: 14px;
+          background: linear-gradient(transparent, rgba(0,0,0,.65)); text-align: center; }
+
+  .panel { background: var(--paper); margin-top: 16px; border-radius: 22px 22px 0 0; padding: 18px 20px 24px; flex: 1; }
+  .msg { font-size: 16px; line-height: 1.55; white-space: pre-line; margin: 0 0 14px; }
+  .msg.bad { color: var(--bad); font-weight: 600; }
+  .msg.ok { color: var(--ok); font-weight: 600; }
+
+  label.reason { display: block; font-weight: 600; margin-bottom: 6px; }
+  textarea { width: 100%; min-height: 76px; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px;
+             border: 2px solid #C9CEDD; background: #fff; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--navy); }
+  .early { background: #FFF4D6; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; font-size: 15px; }
+
+  .choices { display: flex; gap: 10px; margin-bottom: 14px; }
+  .choices button { flex: 1; }
+
+  .row { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }
+  button { font: inherit; font-size: 17px; font-weight: 600; border: 0; border-radius: 14px; padding: 14px 18px; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .primary { background: var(--navy); color: #fff; flex: 1; }
+  .ghost { background: transparent; color: var(--navy); border: 2px solid var(--navy); }
+  .choice { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+  .choice[aria-pressed="true"] { background: var(--navy); color: #fff; }
+
+  /* ปุ่มชัตเตอร์: วงกลมเหลืองแบบปุ่มตอกบัตร */
+  .shutter { width: 84px; height: 84px; border-radius: 50%; padding: 0; background: var(--yellow);
+             box-shadow: 0 0 0 6px #fff, 0 0 0 9px var(--navy); color: var(--navy-deep); font-size: 15px; font-weight: 700; }
+  .shutter:active:not(:disabled) { transform: scale(.95); }
+
+  .result { text-align: center; padding-top: 8px; }
+  .result .big { font-size: 20px; font-weight: 700; white-space: pre-line; line-height: 1.6; }
+  .spinner { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%;
+             display: inline-block; vertical-align: -5px; margin-right: 8px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } .shutter:active:not(:disabled) { transform: none; } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body data-liff-id="2011759995-5YyouSYq" data-api-url="https://script.google.com/macros/s/AKfycbyhXnmZgwxtDcx_PSEklajOuINC2PUiaoZ0pWFgEOxyajZ2uaX2s14DHjE8Bct7cfg/exec">
+<div class="app">
+  <header>
+    <div class="who" id="who">กำลังเชื่อมต่อ LINE…</div>
+    <h1 id="title">ลงเวลา</h1>
+  </header>
+
+  <div class="stage" id="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <img id="shot" alt="รูปที่ถ่าย" hidden>
+    <div class="guide" id="guide"></div>
+    <div class="hint" id="hint">ให้เห็นหน้าตัวเอง และเวลาที่เครื่องคิดเงินด้านหลัง</div>
+  </div>
+
+  <section class="panel">
+    <p class="msg" id="msg" role="status" aria-live="polite">กำลังเตรียมหน้าลงเวลา…</p>
+
+    <div class="choices" id="choices" hidden>
+      <button type="button" class="choice" data-kind="IN" aria-pressed="false">เข้างาน</button>
+      <button type="button" class="choice" data-kind="OUT" aria-pressed="false">ออกงาน</button>
+    </div>
+
+    <div id="reasonBox" hidden>
+      <div class="early" id="earlyText"></div>
+      <label class="reason" for="reason">เหตุผลที่ออกก่อนเวลา (ต้องกรอก)</label>
+      <textarea id="reason" maxlength="200" placeholder="เช่น ไปหาหมอตามนัด"></textarea>
+    </div>
+
+    <div class="row" id="shootRow" hidden>
+      <button type="button" class="shutter" id="btnShoot" disabled>ถ่ายรูป</button>
+    </div>
+
+    <div class="row" id="sendRow" hidden>
+      <button type="button" class="ghost" id="btnRetake">ถ่ายใหม่</button>
+      <button type="button" class="primary" id="btnSend">ส่งลงเวลา</button>
+    </div>
+
+    <div class="row" id="retryRow" hidden>
+      <button type="button" class="primary" id="btnRetryCam">เปิดกล้องอีกครั้ง</button>
+    </div>
+
+    <div class="result" id="result" hidden>
+      <div class="big" id="resultText"></div>
+      <div class="row"><button type="button" class="primary" id="btnClose">ปิดหน้านี้</button></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var cfg = {
+    liffId: document.body.dataset.liffId || '',
+    apiUrl: document.body.dataset.apiUrl || ''
+  };
+  // ห้ามเขียนเครื่องหมาย "น้อยกว่า+เครื่องหมายคำถาม" ติดกันในไฟล์นี้ เพราะ Apps Script จะตีความเป็นคำสั่ง template
+  var TPL = '\x3c?';
+  if (cfg.liffId.indexOf('ใส่_') === 0) cfg.liffId = '';
+  if (cfg.apiUrl.indexOf('ใส่_') === 0) cfg.apiUrl = '';
+  if (cfg.liffId.indexOf(TPL) === 0) cfg.liffId = '';
+  if (cfg.apiUrl.indexOf(TPL) === 0) cfg.apiUrl = '';
+
+  var onGas = !!(window.google && google.script && google.script.run);
+  var state = { kind: null, early: null, stream: null, image: null, sending: false, prepared: null };
+
+  /* ---------- UI helpers ---------- */
+  function say(text, tone) {
+    var el = $('msg');
+    el.textContent = text;
+    el.className = 'msg' + (tone ? ' ' + tone : '');
+  }
+  function show(id, on) { $(id).hidden = !on; }
+  function titleFor(kind) { return kind === 'OUT' ? 'ลงเวลาออกงาน' : kind === 'IN' ? 'ลงเวลาเข้างาน' : 'ลงเวลา'; }
+
+  function refreshControls() {
+    var needReason = state.kind === 'OUT' && !!state.early;
+    show('reasonBox', needReason);
+    if (needReason) $('earlyText').textContent = '⚠️ ' + state.early;
+    var reasonOk = !needReason || $('reason').value.trim().length > 0;
+    var camReady = !!state.stream && $('video').videoWidth > 0;
+    $('btnShoot').disabled = state.sending || !state.kind || !camReady;
+    $('btnSend').disabled = state.sending || !state.image || !reasonOk;
+    $('btnRetake').disabled = state.sending;
+    $('title').textContent = titleFor(state.kind);
+  }
+
+  function fatal(text) {
+    stopCamera();
+    say(text, 'bad');
+    ['choices', 'reasonBox', 'shootRow', 'sendRow', 'retryRow'].forEach(function (id) { show(id, false); });
+    show('stage', false);
+  }
+
+  /* ---------- server call (Apps Script หรือ URL ภายนอก) ---------- */
+  function api(payload) {
+    if (onGas) {
+      return new Promise(function (resolve, reject) {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).clockApi(payload);
+      });
+    }
+    if (!cfg.apiUrl) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า data-api-url'));
+    var url = cfg.apiUrl + (cfg.apiUrl.indexOf('?') > -1 ? '&' : '?') + 'api=1';
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // simple request ไม่ติด CORS preflight
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); });
+  }
+
+  /* ---------- camera ---------- */
+  function stopCamera() {
+    if (state.stream) state.stream.getTracks().forEach(function (t) { t.stop(); });
+    state.stream = null;
+  }
+
+  function cameraErrorText(err) {
+    var name = err && err.name;
+    var policyBlocked = document.featurePolicy && document.featurePolicy.allowsFeature &&
+                        !document.featurePolicy.allowsFeature('camera');
+    if (policyBlocked) {
+      return 'หน้านี้ถูกบล็อกไม่ให้ใช้กล้อง\n(เกิดจากการตั้งค่าหน้าเว็บ ไม่ใช่มือถือของคุณ)\nกรุณาแจ้งผู้ดูแลระบบ';
+    }
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+      return 'ยังไม่ได้อนุญาตให้ LINE ใช้กล้อง\n\n' +
+             'iPhone: ตั้งค่า › LINE › เปิด "กล้อง"\n' +
+             'Android: ตั้งค่า › แอป › LINE › สิทธิ์ › กล้อง › อนุญาต\n\n' +
+             'จากนั้นปิดหน้านี้ แล้วกดปุ่ม 📷 ในเมนูใหม่';
+    }
+    if (name === 'Unsupported') {
+      return 'อุปกรณ์หรือแอป LINE เวอร์ชันนี้ไม่รองรับการเปิดกล้องในหน้านี้\nกรุณาอัปเดตแอป LINE และระบบมือถือ (iPhone ต้อง iOS 14.3 ขึ้นไป)';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+      return 'เปิดกล้องไม่ได้ เพราะกล้องกำลังถูกใช้งานโดยแอปอื่น\nปิดแอปกล้อง/วิดีโอคอลอื่นก่อน แล้วกด "เปิดกล้องอีกครั้ง"';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') {
+      return 'ไม่พบกล้องบนเครื่องนี้';
+    }
+    return 'เปิดกล้องไม่สำเร็จ' + (name ? ' (' + name + ')' : '') + '\nลองปิดหน้านี้แล้วเปิดใหม่ หรืออัปเดตแอป LINE';
+  }
+
+  function startCamera() {
+    show('retryRow', false);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return Promise.reject({ name: 'Unsupported' });
+    }
+    var want = { audio: false, video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 960 } } };
+    return navigator.mediaDevices.getUserMedia(want)
+      .catch(function (err) {
+        if (err && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError')) {
+          return navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+        }
+        throw err;
+      })
+      .then(function (stream) {
+        state.stream = stream;
+        var v = $('video');
+        v.srcObject = stream;
+        stream.getVideoTracks().forEach(function (t) {
+          t.addEventListener('ended', function () {
+            if (state.stream !== stream) return;
+            state.stream = null;
+            if (!state.image) { say('กล้องหยุดทำงาน กด "เปิดกล้องอีกครั้ง"', 'bad'); show('retryRow', true); refreshControls(); }
+          });
+        });
+        return v.play().catch(function () {}).then(function () {
+          return new Promise(function (resolve) {
+            if (v.videoWidth > 0) return resolve();
+            v.addEventListener('loadedmetadata', function () { resolve(); }, { once: true });
+          });
+        });
+      })
+      .then(refreshControls);
+  }
+
+  function capture() {
+    var v = $('video');
+    if (!v.videoWidth) return;
+    var w = 640;                                               // ย่อให้กว้าง 640px
+    var h = Math.round(v.videoHeight * (w / v.videoWidth));
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(v, 0, 0, w, h);
+    state.image = c.toDataURL('image/jpeg', 0.7);              // JPEG คุณภาพ 0.7
+    $('shot').src = state.image;
+    show('shot', true); show('video', false); show('guide', false);
+    show('shootRow', false); show('sendRow', true);
+    say('ตรวจรูปให้เห็นหน้าและเวลาที่เครื่องคิดเงิน แล้วกด "ส่งลงเวลา"\nเวลาที่บันทึก = เวลาของระบบตอนกดส่ง');
+    refreshControls();
+  }
+
+  function retake() {
+    if (state.sending) return;
+    state.image = null;
+    show('shot', false); show('video', true); show('guide', true);
+    show('sendRow', false); show('shootRow', true);
+    say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"');
+    if (!state.stream) startCamera().catch(function (e) { say(cameraErrorText(e), 'bad'); show('retryRow', true); });
+    refreshControls();
+  }
+
+  /* ---------- send ---------- */
+  function send() {
+    if (state.sending || !state.image) return;                 // กันกดซ้ำ
+    var reason = $('reason').value.trim();
+    if (state.kind === 'OUT' && state.early && !reason) { say('กรุณากรอกเหตุผลที่ออกก่อนเวลา', 'bad'); return; }
+
+    state.sending = true;
+    refreshControls();
+    $('btnSend').innerHTML = '<span class="spinner" aria-hidden="true"></span>กำลังบันทึก…';
+    say('กำลังบันทึกเวลา อย่าปิดหน้านี้');
+
+    api({ action: 'submit', idToken: liff.getIDToken(), kind: state.kind, image: state.image, reason: reason })
+      .then(function (res) {
+        if (res && res.ok) {
+          stopCamera();
+          ['choices', 'reasonBox', 'sendRow', 'shootRow', 'retryRow'].forEach(function (id) { show(id, false); });
+          say('');
+          $('msg').hidden = true;
+          $('resultText').textContent = res.message;
+          show('result', true);
+          return;
+        }
+        if (res && res.needReason) { state.early = res.error.split('\n')[0]; }
+        say((res && res.error) || 'บันทึกไม่สำเร็จ กรุณาลองใหม่', 'bad');
+      })
+      .catch(function (err) {
+        say('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด "ส่งลงเวลา" อีกครั้ง\n(' + ((err && err.message) || err) + ')', 'bad');
+      })
+      .then(function () {
+        state.sending = false;
+        $('btnSend').textContent = 'ส่งลงเวลา';
+        refreshControls();
+      });
+  }
+
+  /* ---------- choose IN / OUT ---------- */
+  function chooseKind(kind) {
+    state.kind = kind;
+    Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.kind === kind));
+    });
+    state.early = kind === 'OUT' ? (state.prepared && state.prepared.early) : null;
+    refreshControls();
+  }
+
+  /* ---------- boot ---------- */
+  function boot() {
+    if (!cfg.liffId) return fatal('ยังไม่ได้ตั้งค่า LIFF ID\nกรุณาแจ้งผู้ดูแลระบบ');
+    if (typeof liff === 'undefined') return fatal('โหลดระบบ LINE ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วเปิดใหม่');
+
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () { reject({ code: 'TIMEOUT' }); }, 12000);   // กันค้างที่ "กำลังเชื่อมต่อ LINE…"
+    });
+    Promise.race([liff.init({ liffId: cfg.liffId }), timeout])
+      .then(function () {
+        if (!liff.isInClient()) {
+          return fatal('กรุณาเปิดหน้านี้จากปุ่ม 📷 ในเมนู LINE OA เท่านั้น\n(เปิดในเบราว์เซอร์อื่นไม่ได้)');
+        }
+        var token = liff.getIDToken();
+        if (!token) return fatal('ยืนยันตัวตนไม่สำเร็จ (ไม่มี ID token)\nกรุณาแจ้งผู้ดูแลระบบให้เปิดสิทธิ์ openid ใน LIFF');
+
+        var camPromise = startCamera().then(function () { return null; }, function (e) { return e; });
+        return Promise.all([api({ action: 'prepare', idToken: token }), camPromise]).then(function (out) {
+          var prep = out[0], camErr = out[1];
+          if (!prep || !prep.ok) return fatal((prep && prep.error) || 'โหลดข้อมูลไม่สำเร็จ');
+          state.prepared = prep;
+          $('who').textContent = prep.name + ' · ' + prep.branch;
+
+          if (prep.kinds.length > 1) {
+            show('choices', true);
+            say('เลือกว่าจะลงเวลาเข้างานหรือออกงาน\n(มีรายการเข้างานเมื่อวานที่ยังไม่ได้ลงเวลาออก)');
+          } else {
+            chooseKind(prep.kinds[0]);
+            say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"');
+          }
+          show('shootRow', true);
+          if (camErr) { say(cameraErrorText(camErr), 'bad'); show('retryRow', true); }
+          refreshControls();
+        });
+      })
+      .catch(function (err) {
+        fatal('เชื่อมต่อ LINE ไม่สำเร็จ\nกรุณาปิดหน้านี้แล้วกดปุ่ม 📷 ในเมนูใหม่\n\n(' + ((err && (err.code || err.message)) || err) + ')');
+      });
+  }
+
+  /* ---------- events ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (b) {
+    b.addEventListener('click', function () {
+      chooseKind(b.dataset.kind);
+      say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"');
+    });
+  });
+  $('btnShoot').addEventListener('click', capture);
+  $('btnRetake').addEventListener('click', retake);
+  $('btnSend').addEventListener('click', send);
+  $('reason').addEventListener('input', refreshControls);
+  $('btnRetryCam').addEventListener('click', function () {
+    say('กำลังเปิดกล้อง…');
+    startCamera().then(function () { say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"'); },
+                       function (e) { say(cameraErrorText(e), 'bad'); show('retryRow', true); });
+  });
+  $('btnClose').addEventListener('click', function () {
+    try { liff.closeWindow(); } catch (e) { window.close(); }
+  });
+  $('video').addEventListener('loadeddata', refreshControls);
+  window.addEventListener('pagehide', stopCamera);
+
+  boot();
+})();
+</script>
+</body>
+</html>
