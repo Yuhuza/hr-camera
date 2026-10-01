@@ -61,8 +61,8 @@
   textarea:focus { outline: none; border-color: var(--navy); }
   .early { background: #FFF4D6; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; font-size: 15px; }
 
-  .choices { display: flex; gap: 10px; margin-bottom: 14px; }
-  .choices button { flex: 1; }
+  .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .choices button { flex: 1 1 140px; }
 
   .row { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }
   button { font: inherit; font-size: 17px; font-weight: 600; border: 0; border-radius: 14px; padding: 14px 18px; cursor: pointer; }
@@ -104,10 +104,7 @@
   <section class="panel">
     <p class="msg" id="msg" role="status" aria-live="polite">กำลังเตรียมหน้าลงเวลา…</p>
 
-    <div class="choices" id="choices" hidden>
-      <button type="button" class="choice" data-kind="IN" aria-pressed="false">เข้างาน</button>
-      <button type="button" class="choice" data-kind="OUT" aria-pressed="false">ออกงาน</button>
-    </div>
+    <div class="choices" id="choices" hidden></div>
 
     <div id="reasonBox" hidden>
       <div class="early" id="earlyText"></div>
@@ -126,6 +123,10 @@
 
     <div class="row" id="retryRow" hidden>
       <button type="button" class="primary" id="btnRetryCam">เปิดกล้องอีกครั้ง</button>
+    </div>
+
+    <div class="row" id="reloadRow" hidden>
+      <button type="button" class="primary" id="btnReload">ลองใหม่</button>
     </div>
 
     <div class="result" id="result" hidden>
@@ -161,7 +162,8 @@
     el.className = 'msg' + (tone ? ' ' + tone : '');
   }
   function show(id, on) { $(id).hidden = !on; }
-  function titleFor(kind) { return kind === 'OUT' ? 'ลงเวลาออกงาน' : kind === 'IN' ? 'ลงเวลาเข้างาน' : 'ลงเวลา'; }
+  function titleFor(kind) { return kind === 'OUT' || kind === 'OUT_NOIN' ? 'ลงเวลาออกงาน' : kind === 'IN' ? 'ลงเวลาเข้างาน' : 'ลงเวลา'; }
+  var DEFAULT_LABELS = { IN: 'เข้างาน', OUT: 'ออกงาน', OUT_NOIN: 'ออกงาน (ลืมลงเวลาเข้า)' };
 
   function refreshControls() {
     var needReason = state.kind === 'OUT' && !!state.early;
@@ -175,9 +177,10 @@
     $('title').textContent = titleFor(state.kind);
   }
 
-  function fatal(text) {
+  function fatal(text, canRetry) {
     stopCamera();
     say(text, 'bad');
+    show('reloadRow', !!canRetry);
     ['choices', 'reasonBox', 'shootRow', 'sendRow', 'retryRow'].forEach(function (id) { show(id, false); });
     show('stage', false);
   }
@@ -191,11 +194,38 @@
     }
     if (!cfg.apiUrl) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า data-api-url'));
     var url = cfg.apiUrl + (cfg.apiUrl.indexOf('?') > -1 ? '&' : '?') + 'api=1';
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 25000); // ไม่ให้ค้างนานเกิน 25 วิ
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // simple request ไม่ติด CORS preflight
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); });
+      body: JSON.stringify(payload),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) { clearTimeout(timer); return r.json(); },
+            function (e) { clearTimeout(timer); throw e; });
+  }
+
+  // อ่านข้อมูลอย่างเดียว ลองซ้ำให้อัตโนมัติ 1 ครั้งถ้าสัญญาณหลุด
+  function apiRetry(payload) {
+    return api(payload).catch(function () {
+      return new Promise(function (r) { setTimeout(r, 1500); }).then(function () { return api(payload); });
+    });
+  }
+
+  // หลังส่งแล้วเน็ตหลุด: เช็คว่าระบบบันทึกไปแล้วหรือยัง (กันพนักงานส่งซ้ำ/งงผล)
+  function wasRecorded(kind, prep) {
+    if (!prep) return false;
+    if (kind === 'IN') return !!prep.ok && prep.kinds.indexOf('IN') === -1;
+    return (!prep.ok && /ครบแล้ว/.test(prep.error || '')) || (!!prep.ok && prep.kinds.indexOf('OUT') === -1);
+  }
+
+  function showResult(text) {
+    stopCamera();
+    ['choices', 'reasonBox', 'sendRow', 'shootRow', 'retryRow', 'reloadRow'].forEach(function (id) { show(id, false); });
+    say('');
+    $('msg').hidden = true;
+    $('resultText').textContent = text;
+    show('result', true);
   }
 
   /* ---------- camera ---------- */
@@ -302,20 +332,21 @@
 
     api({ action: 'submit', idToken: liff.getIDToken(), kind: state.kind, image: state.image, reason: reason })
       .then(function (res) {
-        if (res && res.ok) {
-          stopCamera();
-          ['choices', 'reasonBox', 'sendRow', 'shootRow', 'retryRow'].forEach(function (id) { show(id, false); });
-          say('');
-          $('msg').hidden = true;
-          $('resultText').textContent = res.message;
-          show('result', true);
-          return;
-        }
+        if (res && res.ok) { showResult(res.message); return; }
         if (res && res.needReason) { state.early = res.error.split('\n')[0]; }
         say((res && res.error) || 'บันทึกไม่สำเร็จ กรุณาลองใหม่', 'bad');
       })
       .catch(function (err) {
-        say('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด "ส่งลงเวลา" อีกครั้ง\n(' + ((err && err.message) || err) + ')', 'bad');
+        say('สัญญาณไม่เสถียร กำลังตรวจสอบว่าบันทึกสำเร็จหรือยัง…');
+        return apiRetry({ action: 'prepare', idToken: liff.getIDToken() }).then(function (prep) {
+          if (wasRecorded(state.kind, prep)) {
+            showResult('✅ บันทึกเวลาเรียบร้อยแล้ว\n(สัญญาณไม่เสถียร จึงแสดงผลไม่ทัน)\nดูรายละเอียดได้ที่ปุ่ม "สถานะลงเวลา"');
+          } else {
+            say('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด "ส่งลงเวลา" อีกครั้ง', 'bad');
+          }
+        }, function () {
+          say('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด "ส่งลงเวลา" อีกครั้ง\n(ก่อนส่งซ้ำ เช็คที่ปุ่ม "สถานะลงเวลา" ว่าบันทึกไปแล้วหรือยัง)', 'bad');
+        });
       })
       .then(function () {
         state.sending = false;
@@ -325,6 +356,28 @@
   }
 
   /* ---------- choose IN / OUT ---------- */
+  function renderChoices(prep) {
+    var box = $('choices');
+    box.innerHTML = '';
+    prep.kinds.forEach(function (k) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'choice';
+      b.dataset.kind = k;
+      b.setAttribute('aria-pressed', 'false');
+      b.textContent = (prep.labels && prep.labels[k]) || DEFAULT_LABELS[k] || k;
+      b.addEventListener('click', function () {
+        if (state.sending) return;
+        chooseKind(k);
+        say(k === 'OUT_NOIN'
+          ? 'วันนี้ไม่มีเวลาเข้างาน ระบบจะบันทึกเป็น "ลืมลงเวลาเข้า"\nจัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"'
+          : 'จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"');
+      });
+      box.appendChild(b);
+    });
+    show('choices', true);
+  }
+
   function chooseKind(kind) {
     state.kind = kind;
     Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (b) {
@@ -351,15 +404,19 @@
         if (!token) return fatal('ยืนยันตัวตนไม่สำเร็จ (ไม่มี ID token)\nกรุณาแจ้งผู้ดูแลระบบให้เปิดสิทธิ์ openid ใน LIFF');
 
         var camPromise = startCamera().then(function () { return null; }, function (e) { return e; });
-        return Promise.all([api({ action: 'prepare', idToken: token }), camPromise]).then(function (out) {
+        return Promise.all([
+          apiRetry({ action: 'prepare', idToken: token }).catch(function (e) { return { ok: false, net: true, error: String((e && e.message) || e) }; }),
+          camPromise
+        ]).then(function (out) {
           var prep = out[0], camErr = out[1];
-          if (!prep || !prep.ok) return fatal((prep && prep.error) || 'โหลดข้อมูลไม่สำเร็จ');
+          if (prep && prep.net) return fatal('เชื่อมต่อระบบลงเวลาไม่สำเร็จ\nสัญญาณอินเทอร์เน็ตอาจไม่เสถียร กด "ลองใหม่"', true);
+          if (!prep || !prep.ok) return fatal((prep && prep.error) || 'โหลดข้อมูลไม่สำเร็จ', true);
           state.prepared = prep;
           $('who').textContent = prep.name + ' · ' + prep.branch;
 
           if (prep.kinds.length > 1) {
-            show('choices', true);
-            say('เลือกว่าจะลงเวลาเข้างานหรือออกงาน\n(มีรายการเข้างานเมื่อวานที่ยังไม่ได้ลงเวลาออก)');
+            renderChoices(prep);
+            say('เลือกรายการที่ต้องการลงเวลา');
           } else {
             chooseKind(prep.kinds[0]);
             say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"');
@@ -370,17 +427,11 @@
         });
       })
       .catch(function (err) {
-        fatal('เชื่อมต่อ LINE ไม่สำเร็จ\nกรุณาปิดหน้านี้แล้วกดปุ่ม 📷 ในเมนูใหม่\n\n(' + ((err && (err.code || err.message)) || err) + ')');
+        fatal('เชื่อมต่อ LINE ไม่สำเร็จ กด "ลองใหม่"\nถ้ายังไม่ได้ ให้ปิดหน้านี้แล้วกดปุ่ม 📷 ในเมนูใหม่\n\n(' + ((err && (err.code || err.message)) || err) + ')', true);
       });
   }
 
   /* ---------- events ---------- */
-  Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (b) {
-    b.addEventListener('click', function () {
-      chooseKind(b.dataset.kind);
-      say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"');
-    });
-  });
   $('btnShoot').addEventListener('click', capture);
   $('btnRetake').addEventListener('click', retake);
   $('btnSend').addEventListener('click', send);
@@ -390,6 +441,7 @@
     startCamera().then(function () { say('จัดหน้าให้อยู่ในกรอบ แล้วกด "ถ่ายรูป"'); },
                        function (e) { say(cameraErrorText(e), 'bad'); show('retryRow', true); });
   });
+  $('btnReload').addEventListener('click', function () { location.reload(); });
   $('btnClose').addEventListener('click', function () {
     try { liff.closeWindow(); } catch (e) { window.close(); }
   });
