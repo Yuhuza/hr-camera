@@ -219,6 +219,15 @@
     return (!prep.ok && /ครบแล้ว/.test(prep.error || '')) || (!!prep.ok && prep.kinds.indexOf('OUT') === -1);
   }
 
+  // [v16] ส่งข้อความยืนยันเข้าแชท OA ในนามผู้ใช้ (ฟรี ไม่กินโควตา) → บอทตอบผลจริงจากชีตด้วย Reply
+  function notifyChat(kind) {
+    try {
+      if (!liff.isInClient() || !liff.sendMessages) return;
+      liff.sendMessages([{ type: 'text', text: '📷 ลงเวลา' + (kind === 'OUT' ? 'ออก' : 'เข้า') + 'งานแล้ว' }])
+        .catch(function (e) { console.warn('sendMessages', e); });   // ไม่ได้เปิดสิทธิ์/เปิดนอกแชท → ข้ามเงียบๆ
+    } catch (e) { console.warn(e); }
+  }
+
   function showResult(text) {
     stopCamera();
     ['choices', 'reasonBox', 'sendRow', 'shootRow', 'retryRow', 'reloadRow'].forEach(function (id) { show(id, false); });
@@ -332,7 +341,7 @@
 
     api({ action: 'submit', idToken: liff.getIDToken(), kind: state.kind, image: state.image, reason: reason })
       .then(function (res) {
-        if (res && res.ok) { showResult(res.message); return; }
+        if (res && res.ok) { showResult(res.message); notifyChat(state.kind); return; }
         if (res && res.needReason) { state.early = res.error.split('\n')[0]; }
         say((res && res.error) || 'บันทึกไม่สำเร็จ กรุณาลองใหม่', 'bad');
       })
@@ -341,6 +350,7 @@
         return apiRetry({ action: 'prepare', idToken: liff.getIDToken() }).then(function (prep) {
           if (wasRecorded(state.kind, prep)) {
             showResult('✅ บันทึกเวลาเรียบร้อยแล้ว\n(สัญญาณไม่เสถียร จึงแสดงผลไม่ทัน)\nดูรายละเอียดได้ที่ปุ่ม "สถานะลงเวลา"');
+            notifyChat(state.kind);
           } else {
             say('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกด "ส่งลงเวลา" อีกครั้ง', 'bad');
           }
