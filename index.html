@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ลงเวลา</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<link rel="preconnect" href="https://static.line-scdn.net">
+<link rel="preload" as="script" href="https://static.line-scdn.net/liff/edge/2/sdk.js">
+<!-- [v17] ฟอนต์โหลดแบบไม่บล็อกหน้า: ยังไม่มาก็ใช้ฟอนต์เครื่องไปก่อน -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
 <!--
   camera.html — หน้า LIFF ลงเวลาด้วยกล้องสดเท่านั้น
   - ไม่มี <input type="file"> และไม่ใช้ capture attribute: ถ่ายได้จากกล้องสด (getUserMedia) อย่างเดียว
@@ -90,7 +92,7 @@
 </style>
 </head>
 <body data-liff-id="2011759995-5YyouSYq" data-api-url="https://script.google.com/macros/s/AKfycbyhXnmZgwxtDcx_PSEklajOuINC2PUiaoZ0pWFgEOxyajZ2uaX2s14DHjE8Bct7cfg/exec">
-<div class="ver">หน้า v16.1</div>
+<div class="ver">หน้า v17</div>
 <div class="app">
   <header>
     <div class="who" id="who">กำลังเชื่อมต่อ LINE…</div>
@@ -140,6 +142,7 @@
   </section>
 </div>
 
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
 (function () {
   'use strict';
@@ -429,6 +432,8 @@
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject({ code: 'TIMEOUT' }); }, 12000);   // กันค้างที่ "กำลังเชื่อมต่อ LINE…"
     });
+    // [v17] เปิดกล้องพร้อมกับเชื่อมต่อ LINE เลย ไม่ต้องรอกัน
+    var camPromise = startCamera().then(function () { return null; }, function (e) { return e; });
     Promise.race([liff.init({ liffId: cfg.liffId }), timeout])
       .then(function () {
         if (!liff.isInClient()) {
@@ -437,7 +442,6 @@
         var token = liff.getIDToken();
         if (!token) return fatal('ยืนยันตัวตนไม่สำเร็จ (ไม่มี ID token)\nกรุณาแจ้งผู้ดูแลระบบให้เปิดสิทธิ์ openid ใน LIFF');
 
-        var camPromise = startCamera().then(function () { return null; }, function (e) { return e; });
         return Promise.all([
           apiRetry({ action: 'prepare', idToken: token }).catch(function (e) { return { ok: false, net: true, error: String((e && e.message) || e) }; }),
           camPromise
