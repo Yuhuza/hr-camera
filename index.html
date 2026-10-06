@@ -79,6 +79,8 @@
   .shutter:active:not(:disabled) { transform: scale(.95); }
 
   .result { text-align: center; padding-top: 8px; }
+  .note { font-size: 14px; color: var(--muted); margin: 12px 0 0; white-space: pre-line; }
+  .ver { position: fixed; right: 10px; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: rgba(255,255,255,.45); }
   .result .big { font-size: 20px; font-weight: 700; white-space: pre-line; line-height: 1.6; }
   .spinner { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%;
              display: inline-block; vertical-align: -5px; margin-right: 8px; animation: spin .8s linear infinite; }
@@ -88,6 +90,7 @@
 </style>
 </head>
 <body data-liff-id="2011759995-5YyouSYq" data-api-url="https://script.google.com/macros/s/AKfycbyhXnmZgwxtDcx_PSEklajOuINC2PUiaoZ0pWFgEOxyajZ2uaX2s14DHjE8Bct7cfg/exec">
+<div class="ver">หน้า v16.1</div>
 <div class="app">
   <header>
     <div class="who" id="who">กำลังเชื่อมต่อ LINE…</div>
@@ -131,6 +134,7 @@
 
     <div class="result" id="result" hidden>
       <div class="big" id="resultText"></div>
+      <p class="note" id="chatNote" hidden></p>
       <div class="row"><button type="button" class="primary" id="btnClose">ปิดหน้านี้</button></div>
     </div>
   </section>
@@ -219,13 +223,33 @@
     return (!prep.ok && /ครบแล้ว/.test(prep.error || '')) || (!!prep.ok && prep.kinds.indexOf('OUT') === -1);
   }
 
-  // [v16] ส่งข้อความยืนยันเข้าแชท OA ในนามผู้ใช้ (ฟรี ไม่กินโควตา) → บอทตอบผลจริงจากชีตด้วย Reply
+  // [v16.1] ส่งข้อความยืนยันเข้าแชท OA ในนามผู้ใช้ (ฟรี) → บอทตอบผลจริงด้วย Reply
+  //         ขอสิทธิ์ chat_message.write ให้อัตโนมัติ และแสดงสาเหตุถ้าส่งไม่ได้
   function notifyChat(kind) {
+    var note = $('chatNote');
+    function setNote(t) { note.textContent = t || ''; note.hidden = !t; }
+    function errText(e) { return (e && (e.code || e.message)) || String(e); }
     try {
-      if (!liff.isInClient() || !liff.sendMessages) return;
-      liff.sendMessages([{ type: 'text', text: '📷 ลงเวลา' + (kind === 'OUT' ? 'ออก' : 'เข้า') + 'งานแล้ว' }])
-        .catch(function (e) { console.warn('sendMessages', e); });   // ไม่ได้เปิดสิทธิ์/เปิดนอกแชท → ข้ามเงียบๆ
-    } catch (e) { console.warn(e); }
+      if (!liff.isInClient() || !liff.sendMessages) return setNote('');
+      var ctx = liff.getContext ? liff.getContext() : null;
+      var check = (liff.permission && liff.permission.query)
+        ? liff.permission.query('chat_message.write').then(function (p) {
+            if (p.state === 'unavailable') throw { code: 'ยังไม่ได้เปิด chat_message.write ในการตั้งค่า LIFF' };
+            if (p.state === 'prompt' && liff.permission.requestAll) return liff.permission.requestAll();
+          })
+        : Promise.resolve();
+      check
+        .then(function () {
+          return liff.sendMessages([{ type: 'text', text: '📷 ลงเวลา' + (kind === 'OUT' ? 'ออก' : 'เข้า') + 'งานแล้ว' }]);
+        })
+        .then(function () { setNote('💬 ส่งข้อความยืนยันเข้าแชทแล้ว'); })
+        .catch(function (e) {
+          setNote('ส่งข้อความยืนยันเข้าแชทไม่สำเร็จ (' + errText(e) + ')' + (ctx ? ' [' + ctx.type + ']' : '') +
+                  '\nการลงเวลาบันทึกเรียบร้อยแล้ว ไม่ต้องลงซ้ำ');
+        });
+    } catch (e) {
+      setNote('ส่งข้อความยืนยันเข้าแชทไม่สำเร็จ (' + errText(e) + ')');
+    }
   }
 
   function showResult(text) {
