@@ -92,7 +92,7 @@
 </style>
 </head>
 <body data-liff-id="2011759995-5YyouSYq" data-api-url="https://script.google.com/macros/s/AKfycbyhXnmZgwxtDcx_PSEklajOuINC2PUiaoZ0pWFgEOxyajZ2uaX2s14DHjE8Bct7cfg/exec">
-<div class="ver">หน้า v17</div>
+<div class="ver">หน้า v19</div>
 <div class="app">
   <header>
     <div class="who" id="who">กำลังเชื่อมต่อ LINE…</div>
@@ -364,7 +364,10 @@
     state.sending = true;
     refreshControls();
     $('btnSend').innerHTML = '<span class="spinner" aria-hidden="true"></span>กำลังบันทึก…';
-    say('กำลังบันทึกเวลา อย่าปิดหน้านี้');
+    say('กำลังส่งรูป… อย่าปิดหน้านี้');
+    // [v19] บอกความคืบหน้า ให้รู้ว่าระบบยังทำงานอยู่
+    var stepTimer = setTimeout(function () { if (state.sending) say('ได้รับรูปแล้ว กำลังบันทึกเวลา…'); }, 3000);
+    var slowTimer = setTimeout(function () { if (state.sending) say('ใกล้เสร็จแล้ว… (สัญญาณช้า กรุณารอสักครู่)'); }, 9000);
 
     api({ action: 'submit', idToken: liff.getIDToken(), kind: state.kind, image: state.image, reason: reason })
       .then(function (res) {
@@ -386,6 +389,7 @@
         });
       })
       .then(function () {
+        clearTimeout(stepTimer); clearTimeout(slowTimer);
         state.sending = false;
         $('btnSend').textContent = 'ส่งลงเวลา';
         refreshControls();
