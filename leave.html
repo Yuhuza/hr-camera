@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ขอลา</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://static.line-scdn.net">
+<link rel="preload" as="script" href="https://static.line-scdn.net/liff/edge/2/sdk.js">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
+<!--
+  leave.html — แบบฟอร์มขอลา (LIFF ตัวที่ 2) | วางบน GitHub คู่กับ index.html
+  แก้ data-liff-id (LIFF ID ของหน้าฟอร์มลา) และ data-api-url (URL เว็บแอป /exec ตัวเดียวกับ index.html) ใน <body>
+  กฎการลาทั้งหมดถูกตรวจซ้ำที่ server — หน้านี้ตรวจเพื่อความสะดวกเท่านั้น
+-->
+<style>
+  :root {
+    --navy: #1B2F7A; --navy-deep: #12205A; --yellow: #FFC72C; --paper: #F5F6FA; --ink: #172033; --muted: #5B6480;
+    --ok: #1E8E5A; --okbg: #E3F4EA; --bad: #B8322A; --badbg: #FBE6E4; --warn: #8A5A00; --warnbg: #FFF4D6;
+    --line: #DADFEB; --sel: #EEF1FB;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: "IBM Plex Sans Thai", "Sukhumvit Set", "Noto Sans Thai", system-ui, sans-serif;
+    background: var(--navy-deep); color: var(--ink);
+    padding-top: env(safe-area-inset-top, 0px); -webkit-tap-highlight-color: transparent;
+  }
+  .app { min-height: 100vh; display: flex; flex-direction: column; max-width: 520px; margin: 0 auto; }
+  header { color: #fff; padding: 16px 20px 12px; }
+  header .who { font-size: 14px; opacity: .85; min-height: 1.4em; }
+  header h1 { margin: 2px 0 0; font-size: 26px; font-weight: 700; }
+  .tabs { display: flex; margin: 0 16px 14px; background: rgba(255,255,255,.12); border-radius: 14px; padding: 4px; }
+  .tabs button { flex: 1; background: transparent; color: #fff; border: 0; border-radius: 11px; padding: 9px 0; font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: #fff; color: var(--navy); }
+  .panel { background: var(--paper); border-radius: 22px 22px 0 0; padding: 18px 18px calc(28px + env(safe-area-inset-bottom, 0px)); flex: 1; }
+  h3 { font-size: 15px; margin: 18px 0 8px; color: var(--navy-deep); }
+  h3:first-child { margin-top: 0; }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+
+  .types { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .opt { text-align: left; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; font-weight: 600; font-size: 15px; color: var(--ink); }
+  .opt small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); }
+  .opt[aria-pressed="true"] { border-color: var(--navy); background: var(--sel); box-shadow: inset 0 0 0 1px var(--navy); }
+  .opt:disabled { opacity: .5; cursor: not-allowed; }
+  .seg { display: flex; gap: 8px; }
+  .seg button { flex: 1; background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 10px 0; font-weight: 600; font-size: 14.5px; color: var(--ink); }
+  .seg button[aria-pressed="true"] { border-color: var(--navy); background: var(--navy); color: #fff; }
+
+  .dates { display: flex; gap: 8px; }
+  .date { flex: 1; min-width: 0; }
+  .date label { display: block; font-size: 12.5px; color: var(--muted); margin: 0 0 4px 2px; }
+  .date input { width: 100%; font: inherit; font-size: 16px; font-weight: 600; color: var(--ink); background: #fff; border: 2px solid var(--line);
+                border-radius: 12px; padding: 9px 10px; min-height: 46px; -webkit-appearance: none; appearance: none; }
+  .date input:focus { border-color: var(--navy); outline: none; }
+  .date .th { font-size: 12.5px; color: var(--navy); margin: 4px 0 0 2px; min-height: 1.2em; }
+  .hint { font-size: 13px; color: var(--warn); background: var(--warnbg); border-radius: 10px; padding: 7px 10px; margin-top: 8px; }
+  textarea { width: 100%; min-height: 80px; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: #fff; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--navy); }
+
+  .sum { margin-top: 16px; background: #fff; border: 1px dashed var(--navy); border-radius: 14px; padding: 12px 14px; font-size: 14.5px; line-height: 1.6; }
+  .sum b { color: var(--navy); }
+  .sum.bad { border-color: var(--bad); color: var(--bad); }
+  .btn { display: block; width: 100%; text-align: center; background: var(--navy); color: #fff; font-weight: 700; font-size: 17px; border: 0; border-radius: 14px; padding: 14px; margin-top: 14px; }
+  .btn.ghost { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .missing { font-size: 13px; color: var(--muted); text-align: center; margin-top: 8px; min-height: 1.3em; }
+  .err { color: var(--bad); font-weight: 600; font-size: 14.5px; white-space: pre-line; margin-top: 10px; text-align: center; }
+
+  .bal { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .bal > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  .bal .t { font-size: 13px; color: var(--muted); }
+  .bal b { display: block; font-size: 22px; color: var(--navy); line-height: 1.25; }
+  .bal b span { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .bal small { display: block; font-size: 12px; color: var(--warn); margin-top: 2px; }
+  .req { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px; margin-bottom: 9px; }
+  .req .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+  .req .meta { font-size: 13.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; overflow-wrap: anywhere; }
+  .pill { flex: none; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: #ECEEF3; color: var(--muted); }
+  .pill.wait { background: var(--warnbg); color: var(--warn); } .pill.ok { background: var(--okbg); color: var(--ok); }
+  .pill.no { background: var(--badbg); color: var(--bad); }
+  .cancel { margin-top: 8px; font-size: 13.5px; font-weight: 700; color: var(--bad); background: #fff; border: 1.5px solid var(--bad); border-radius: 10px; padding: 5px 12px; }
+  .dlg { margin-top: 10px; background: #fff; border-radius: 14px; border: 2px solid var(--bad); padding: 12px; }
+  .dlg b { color: var(--bad); }
+  .dlg p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+  .dlg .row { display: flex; gap: 8px; margin-top: 10px; }
+  .dlg .row button { flex: 1; border-radius: 12px; padding: 10px 0; font-weight: 700; border: 2px solid var(--line); background: #fff; color: var(--ink); }
+  .dlg .row .yes { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .dlg .row button:disabled { opacity: .5; }
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 16px 0; }
+
+  .done { text-align: center; padding-top: 20px; }
+  .done .ic { width: 74px; height: 74px; border-radius: 50%; background: var(--okbg); margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+  .done h2 { margin: 0 0 6px; font-size: 22px; color: var(--ok); }
+  .done .sub { color: var(--muted); font-size: 14.5px; }
+  .done .card { text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 14.5px; line-height: 1.7; margin-top: 12px; overflow-wrap: anywhere; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 12px; white-space: pre-line; text-align: center; }
+  .loading { text-align: center; color: var(--muted); padding: 40px 0; white-space: pre-line; }
+  .loading.bad { color: var(--bad); font-weight: 600; }
+  .spinner { width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; display: inline-block; vertical-align: -4px; margin-right: 8px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+  .ver { text-align: right; font-size: 11px; color: rgba(0,0,0,.28); margin-top: 18px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body data-liff-id="ใส่_LEAVE_LIFF_ID_ตรงนี้" data-api-url="ใส่_URL_เว็บแอป_ตรงนี้">
+<div class="app">
+  <header>
+    <div class="who" id="who">กำลังเชื่อมต่อ LINE…</div>
+    <h1 id="title">ขอลา</h1>
+  </header>
+  <div class="tabs" role="tablist" id="tabs" hidden>
+    <button type="button" role="tab" id="tabForm" aria-selected="true">ขอลา</button>
+    <button type="button" role="tab" id="tabHist" aria-selected="false">วันลา &amp; ประวัติ</button>
+  </div>
+
+  <section class="panel">
+    <div class="loading" id="loading">กำลังโหลด…</div>
+    <div id="reloadBox" hidden><button type="button" class="btn" id="btnReload">ลองใหม่</button></div>
+
+    <!-- ① แบบฟอร์ม -->
+    <form id="form" hidden novalidate>
+      <h3>ประเภทการลา</h3>
+      <div class="types" id="types"></div>
+
+      <h3>ช่วงเวลา</h3>
+      <div class="seg" id="modes">
+        <button type="button" data-mode="full" aria-pressed="false">เต็มวัน</button>
+        <button type="button" data-mode="เช้า" aria-pressed="false">ครึ่งวันเช้า</button>
+        <button type="button" data-mode="บ่าย" aria-pressed="false">ครึ่งวันบ่าย</button>
+      </div>
+
+      <h3 id="dateTitle">วันที่ลา</h3>
+      <div class="dates">
+        <div class="date"><label for="start" id="startLabel">ตั้งแต่</label><input type="date" id="start"><div class="th" id="startTh"></div></div>
+        <div class="date" id="endBox"><label for="end">ถึง</label><input type="date" id="end"><div class="th" id="endTh"></div></div>
+      </div>
+      <div class="hint" id="advHint" hidden></div>
+
+      <div id="ptBox" hidden>
+        <h3>มี Part Time มาแทนหรือไม่</h3>
+        <div class="seg" id="pts"></div>
+      </div>
+      <div id="reasonBox" hidden>
+        <h3><label for="reason">เหตุผลการลา</label></h3>
+        <textarea id="reason" maxlength="200" placeholder="เช่น เป็นไข้ ไปพบแพทย์"></textarea>
+      </div>
+
+      <div class="sum" id="sum" hidden></div>
+      <button type="submit" class="btn" id="btnSend" disabled>ส่งคำขอ</button>
+      <div class="missing" id="missing"></div>
+      <div class="err" id="formErr" hidden></div>
+    </form>
+
+    <!-- ② วันลา & ประวัติ -->
+    <div id="hist" hidden>
+      <div class="bal" id="bal"></div>
+      <h3>คำขอล่าสุด</h3>
+      <div id="reqs"></div>
+    </div>
+
+    <!-- ③ ส่งสำเร็จ -->
+    <div id="done" class="done" hidden>
+      <div class="ic" aria-hidden="true">📨</div>
+      <h2>ส่งคำขอแล้ว</h2>
+      <div class="sub">รอผู้อนุมัติ · ผลจะแจ้งกลับทางไลน์</div>
+      <div class="card" id="doneCard"></div>
+      <div class="note" id="chatNote" hidden></div>
+      <button type="button" class="btn ghost" id="btnGoHist">ดูวันลา &amp; ประวัติ</button>
+      <button type="button" class="btn" id="btnClose">ปิดหน้านี้</button>
+    </div>
+    <div class="ver">ฟอร์มลา v23</div>
+  </section>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var cfg = { liffId: document.body.dataset.liffId || '', apiUrl: document.body.dataset.apiUrl || '' };
+  if (cfg.liffId.indexOf('ใส่_') === 0) cfg.liffId = '';
+  if (cfg.apiUrl.indexOf('ใส่_') === 0) cfg.apiUrl = '';
+
+  var data = null;                      // ข้อมูลจาก server (โควตา, ประวัติ, กฎ)
+  var f = { type: '', mode: '', pt: '' };
+  var sending = false, cancelOpen = '';
+
+  /* ---------- ตัวช่วย ---------- */
+  var MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  function thaiDate(ymd) {
+    var p = String(ymd || '').split('-').map(Number);
+    return p.length === 3 && p[0] ? p[2] + ' ' + MONTHS[p[1] - 1] + ' ' + String(p[0] + 543).slice(2) : '';
+  }
+  function show(id, on) { $(id).hidden = !on; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function isPlanned(t) { return !!data && data.planned.indexOf(t) > -1; }
+  function typeInfo(t) { return data ? data.types.filter(function (x) { return x.type === t; })[0] : null; }
+  function daysOf() {
+    var s = $('start').value, e = f.mode === 'full' ? $('end').value : s;
+    if (!s || !e || e < s || !f.mode) return 0;
+    return f.mode === 'full' ? Math.round((Date.parse(e) - Date.parse(s)) / 86400000) + 1 : 0.5;
+  }
+  function thaiStamp(s) { s = String(s || ''); return s.length >= 16 ? thaiDate(s.slice(0, 10)) + ' ' + s.slice(11, 16) + ' น.' : s; }
+  function fmtDays(n) { return (Math.round(n * 10) / 10) + ' วัน'; }
+
+  /* ---------- server ---------- */
+  function api(payload) {
+    if (!cfg.apiUrl) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า data-api-url'));
+    payload.idToken = liff.getIDToken();
+    var url = cfg.apiUrl + (cfg.apiUrl.indexOf('?') > -1 ? '&' : '?') + 'api=1';
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 25000);
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) { clearTimeout(timer); return r.json(); }, function (e) { clearTimeout(timer); throw e; });
+  }
+  function load() {
+    return api({ action: 'leave_prepare' }).catch(function () {
+      return new Promise(function (r) { setTimeout(r, 1500); }).then(function () { return api({ action: 'leave_prepare' }); });
+    });
+  }
+
+  // ส่งข้อความยืนยันเข้าแชท (ฟรี) → บอทตอบผลจริงจากชีตด้วย Reply
+  function notifyChat(text) {
+    var note = $('chatNote');
+    function setNote(t) { note.textContent = t || ''; note.hidden = !t; }
+    try {
+      if (!liff.isInClient() || !liff.sendMessages) return;
+      var check = (liff.permission && liff.permission.query)
+        ? liff.permission.query('chat_message.write').then(function (p) {
+            if (p.state === 'unavailable') throw { code: 'ยังไม่ได้เปิด chat_message.write ใน LIFF' };
+            if (p.state === 'prompt' && liff.permission.requestAll) return liff.permission.requestAll();
+          })
+        : Promise.resolve();
+      check.then(function () { return liff.sendMessages([{ type: 'text', text: text }]); })
+        .then(function () { setNote('💬 ส่งข้อความยืนยันเข้าแชทแล้ว'); })
+        .catch(function (e) { setNote('ส่งข้อความเข้าแชทไม่สำเร็จ (' + ((e && (e.code || e.message)) || e) + ')\nคำขอบันทึกเรียบร้อยแล้ว'); });
+    } catch (e) { /* ไม่กระทบการบันทึก */ }
+  }
+
+  /* ---------- แท็บ ---------- */
+  function tab(which) {
+    $('tabForm').setAttribute('aria-selected', String(which === 'form'));
+    $('tabHist').setAttribute('aria-selected', String(which === 'hist'));
+    show('form', which === 'form'); show('hist', which === 'hist'); show('done', which === 'done');
+    $('title').textContent = which === 'hist' ? 'วันลาคงเหลือ ปี ' + data.year : 'ขอลา';
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------- ① แบบฟอร์ม ---------- */
+  function renderTypes() {
+    var box = $('types'); box.innerHTML = '';
+    data.types.forEach(function (t) {
+      var b = el('button', 'opt'); b.type = 'button';
+      b.setAttribute('aria-pressed', String(f.type === t.type));
+      b.appendChild(document.createTextNode(t.type));
+      b.appendChild(el('small', '', t.avail > 0 ? 'ขอได้อีก ' + fmtDays(t.avail) + (t.pending ? ' (รออนุมัติ ' + t.pending + ')' : '') : 'ใช้ครบแล้ว'));
+      b.disabled = !(t.avail > 0);
+      b.addEventListener('click', function () { f.type = t.type; renderTypes(); update(); });
+      box.appendChild(b);
+    });
+    if (f.type && !(typeInfo(f.type) && typeInfo(f.type).avail > 0)) f.type = '';
+  }
+  function renderPts() {
+    var box = $('pts'); box.innerHTML = '';
+    data.ptChoices.forEach(function (c) {
+      var b = el('button', '', c); b.type = 'button';
+      b.setAttribute('aria-pressed', String(f.pt === c));
+      b.addEventListener('click', function () { f.pt = c; renderPts(); update(); });
+      box.appendChild(b);
+    });
+  }
+
+  function missing() {
+    if (!f.type) return 'กรุณาเลือกประเภทการลา';
+    if (!f.mode) return 'กรุณาเลือกช่วงเวลา';
+    var s = $('start').value, e = $('end').value;
+    if (!s) return f.mode === 'full' ? 'กรุณาเลือกวันเริ่มลา' : 'กรุณาเลือกวันที่ลา';
+    if (isPlanned(f.type) && s < data.minPlanned) return f.type + 'ต้องลาล่วงหน้าอย่างน้อย ' + data.advanceDays + ' วัน';
+    if (f.mode === 'full' && !e) return 'กรุณาเลือกวันสุดท้ายที่ลา';
+    if (f.mode === 'full' && e < s) return 'วันสุดท้ายต้องไม่ก่อนวันเริ่ม';
+    var t = typeInfo(f.type), n = daysOf();
+    if (t && n > t.avail) return f.type + ' ขอได้อีก ' + fmtDays(t.avail) + ' ไม่พอสำหรับ ' + fmtDays(n);
+    if (isPlanned(f.type) && !f.pt) return 'กรุณาเลือกว่ามี Part Time มาแทนหรือไม่';
+    if (!isPlanned(f.type) && !$('reason').value.trim()) return 'กรุณากรอกเหตุผลการลา';
+    return '';
+  }
+
+  function update() {
+    var planned = isPlanned(f.type), half = f.mode && f.mode !== 'full';
+    Array.prototype.forEach.call($('modes').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.mode === f.mode)); });
+    show('endBox', !half);
+    $('startLabel').textContent = half ? 'วันที่ลา (ครึ่งวัน' + f.mode + ')' : 'ตั้งแต่';
+    // ปฏิทิน: ลาพักร้อน/ประเพณี เลือกได้ตั้งแต่วันที่กำหนด
+    $('start').min = planned ? data.minPlanned : '';
+    if (planned && $('start').value && $('start').value < data.minPlanned) $('start').value = '';
+    $('end').min = $('start').value || $('start').min || '';
+    if ($('end').value && $('start').value && $('end').value < $('start').value) $('end').value = '';
+    $('startTh').textContent = thaiDate($('start').value);
+    $('endTh').textContent = thaiDate($('end').value);
+    $('advHint').textContent = f.type + 'ต้องลาล่วงหน้าอย่างน้อย ' + data.advanceDays + ' วัน · เลือกได้ตั้งแต่ ' + thaiDate(data.minPlanned);
+    show('advHint', planned);
+    show('ptBox', !!f.type && planned);
+    show('reasonBox', !!f.type && !planned);
+
+    var msg = missing(), n = daysOf(), t = typeInfo(f.type), sum = $('sum');
+    if (f.type && f.mode && n > 0) {
+      sum.innerHTML = '';
+      var over = t && n > t.avail;
+      sum.className = 'sum' + (over ? ' bad' : '');
+      var line1 = el('div'); line1.appendChild(document.createTextNode('📝 '));
+      line1.appendChild(el('b', '', f.type + ' ' + fmtDays(n)));
+      var s = $('start').value, e = half ? s : $('end').value;
+      line1.appendChild(document.createTextNode(' (' + (s === e ? thaiDate(s) : thaiDate(s) + ' – ' + thaiDate(e)) + (half ? ' ครึ่งวัน' + f.mode : '') + ')'));
+      sum.appendChild(line1);
+      if (planned && f.pt) sum.appendChild(el('div', '', 'Part Time แทน: ' + f.pt));
+      if (t && !over) {
+        var l3 = el('div'); l3.appendChild(document.createTextNode('หลังอนุมัติ ' + f.type + 'เหลือ '));
+        l3.appendChild(el('b', '', fmtDays(t.avail - n))); sum.appendChild(l3);
+      }
+      show('sum', true);
+    } else show('sum', false);
+    $('missing').textContent = msg || 'ระบบตรวจกฎการลาอีกครั้งตอนกดส่ง';
+    $('btnSend').disabled = sending || !!msg;
+  }
+
+  function resetForm() {
+    f = { type: '', mode: '', pt: '' };
+    $('start').value = ''; $('end').value = ''; $('reason').value = '';
+    show('formErr', false); renderTypes(); renderPts(); update();
+  }
+
+  function submit(ev) {
+    ev.preventDefault();
+    if (sending || missing()) return update();
+    sending = true; show('formErr', false);
+    $('btnSend').innerHTML = '<span class="spinner" aria-hidden="true"></span>กำลังส่ง…';
+    update();
+    var payload = { action: 'leave_submit', type: f.type, mode: f.mode, start: $('start').value,
+      end: f.mode === 'full' ? $('end').value : $('start').value, pt: f.pt, reason: $('reason').value };
+    var before = data.history.map(function (h) { return h.id; });
+    api(payload).then(function (res) {
+      if (res && res.ok) return success(res);
+      if (res && res.data) setData(res.data);
+      fail((res && res.error) || 'ส่งไม่สำเร็จ กรุณาลองใหม่');
+    }).catch(function () {
+      // เน็ตหลุดหลังกดส่ง: เช็คว่าระบบบันทึกไปแล้วหรือยัง (กันส่งซ้ำ)
+      return load().then(function (d) {
+        var fresh = d && d.ok ? d.history.filter(function (h) { return before.indexOf(h.id) === -1 && h.type === payload.type && h.start === payload.start; })[0] : null;
+        if (fresh) { setData(d); return success({ id: fresh.id, message: fresh.type + ' ' + fresh.period + ' (' + fresh.days + ' วัน)', detail: fresh.pt ? 'Part Time แทน: ' + fresh.pt : 'เหตุผล: ' + fresh.reason, data: d }); }
+        fail('ส่งไม่สำเร็จ สัญญาณไม่เสถียร กรุณากด "ส่งคำขอ" อีกครั้ง');
+      }, function () { fail('ส่งไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกดส่งอีกครั้ง\n(ก่อนส่งซ้ำ ดูที่แท็บ "วันลา & ประวัติ" ว่าส่งไปแล้วหรือยัง)'); });
+    }).then(function () {
+      sending = false; $('btnSend').textContent = 'ส่งคำขอ'; update();
+    });
+  }
+  function fail(text) { $('formErr').textContent = text; show('formErr', true); }
+  function success(res) {
+    if (res.data) setData(res.data);
+    var c = $('doneCard'); c.innerHTML = '';
+    c.appendChild(el('div', '', res.message)); c.appendChild(el('div', '', res.detail || ''));
+    var id = el('div', '', 'เลขที่คำขอ ' + res.id); id.style.cssText = 'color:var(--muted);font-size:13px'; c.appendChild(id);
+    tab('done'); resetForm();
+    notifyChat('📝 ส่งคำขอลาแล้ว');
+  }
+
+  /* ---------- ② วันลา & ประวัติ ---------- */
+  var PILL = { 'รออนุมัติ': 'wait', 'อนุมัติ': 'ok', 'ไม่อนุมัติ': 'no' };
+  function renderHist() {
+    var bal = $('bal'); bal.innerHTML = '';
+    data.types.forEach(function (t) {
+      var d = el('div'); d.appendChild(el('div', 't', t.type));
+      var b = el('b', '', String(t.left)); b.appendChild(el('span', '', ' / ' + t.quota)); d.appendChild(b);
+      if (t.pending) d.appendChild(el('small', '', 'รออนุมัติ ' + fmtDays(t.pending)));
+      bal.appendChild(d);
+    });
+    var box = $('reqs'); box.innerHTML = '';
+    if (!data.history.length) box.appendChild(el('div', 'empty', 'ยังไม่มีคำขอลา'));
+    data.history.forEach(function (h) {
+      var r = el('div', 'req'), top = el('div', 'top');
+      top.appendChild(el('span', '', h.type + ' ' + (h.half ? 'ครึ่งวัน' + h.half : fmtDays(h.days))));
+      top.appendChild(el('span', 'pill ' + (PILL[h.status] || ''), h.status));
+      r.appendChild(top);
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', '', h.period + ' · ' + (h.pt ? 'Part Time: ' + h.pt : 'เหตุผล: ' + (h.reason || '-'))));
+      meta.appendChild(el('div', '', h.status === 'รออนุมัติ' ? 'ส่งเมื่อ ' + thaiStamp(h.created) : (h.by ? 'โดย ' + h.by : '')));
+      r.appendChild(meta);
+      if (h.status === 'รออนุมัติ') {
+        if (cancelOpen === h.id) {
+          var dlg = el('div', 'dlg'); dlg.appendChild(el('b', '', 'ยืนยันยกเลิกคำขอนี้?'));
+          dlg.appendChild(el('p', '', 'ระบบจะคืนวันลาให้ทันที'));
+          var row = el('div', 'row'), no = el('button', '', 'ไม่ยกเลิก'), yes = el('button', 'yes', 'ยกเลิกคำขอ');
+          no.type = yes.type = 'button';
+          no.addEventListener('click', function () { cancelOpen = ''; renderHist(); });
+          yes.addEventListener('click', function () { doCancel(h.id, yes, no, dlg); });
+          row.appendChild(no); row.appendChild(yes); dlg.appendChild(row); r.appendChild(dlg);
+        } else {
+          var c = el('button', 'cancel', 'ยกเลิกคำขอ'); c.type = 'button';
+          c.addEventListener('click', function () { cancelOpen = h.id; renderHist(); });
+          r.appendChild(c);
+        }
+      }
+      box.appendChild(r);
+    });
+  }
+  function doCancel(id, yes, no, dlg) {
+    yes.disabled = no.disabled = true; yes.textContent = 'กำลังยกเลิก…';
+    function done(msg, isErr) {
+      cancelOpen = ''; renderHist();
+      var n = el('div', isErr ? 'err' : 'note', msg); $('reqs').insertBefore(n, $('reqs').firstChild);
+    }
+    api({ action: 'leave_cancel', id: id }).then(function (res) {
+      if (res && res.data) setData(res.data);
+      if (res && res.ok) { done('🗑 ' + res.message); notifyChat('📝 ยกเลิกคำขอลาแล้ว'); }
+      else done((res && res.error) || 'ยกเลิกไม่สำเร็จ', true);
+    }).catch(function () {
+      load().then(function (d) {
+        if (d && d.ok) setData(d);
+        var h = d && d.ok ? d.history.filter(function (x) { return x.id === id; })[0] : null;
+        if (h && h.status === 'ยกเลิก') { done('🗑 ยกเลิกคำขอแล้ว'); notifyChat('📝 ยกเลิกคำขอลาแล้ว'); }
+        else done('ยกเลิกไม่สำเร็จ สัญญาณไม่เสถียร กรุณาลองอีกครั้ง', true);
+      }, function () { done('ยกเลิกไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง', true); });
+    });
+  }
+
+  function setData(d) {
+    data = d;
+    $('who').textContent = d.name + ' · ' + d.branch;
+    renderTypes(); renderPts(); renderHist(); update();
+  }
+
+  /* ---------- เริ่มต้น ---------- */
+  function fatal(text, retry) {
+    $('loading').textContent = text; $('loading').className = 'loading bad'; show('loading', true);
+    show('reloadBox', !!retry); ['tabs', 'form', 'hist', 'done'].forEach(function (i) { show(i, false); });
+  }
+  function boot() {
+    if (!cfg.liffId) return fatal('ยังไม่ได้ตั้งค่า LIFF ID ของฟอร์มลา\nกรุณาแจ้งผู้ดูแลระบบ');
+    if (typeof liff === 'undefined') return fatal('โหลดระบบ LINE ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วเปิดใหม่', true);
+    var timeout = new Promise(function (_, rej) { setTimeout(function () { rej({ code: 'TIMEOUT' }); }, 12000); });
+    Promise.race([liff.init({ liffId: cfg.liffId }), timeout]).then(function () {
+      if (!liff.isInClient()) return fatal('กรุณาเปิดหน้านี้จากปุ่ม "ลา" ในเมนู LINE OA เท่านั้น');
+      if (!liff.getIDToken()) return fatal('ยืนยันตัวตนไม่สำเร็จ (ไม่มี ID token)\nกรุณาแจ้งผู้ดูแลระบบให้เปิดสิทธิ์ openid ใน LIFF');
+      return load().then(function (d) {
+        if (!d || !d.ok) return fatal((d && d.error) || 'โหลดข้อมูลไม่สำเร็จ', true);
+        show('loading', false); show('tabs', true);
+        setData(d); tab('form');
+      }, function () { fatal('เชื่อมต่อระบบไม่สำเร็จ สัญญาณอาจไม่เสถียร กด "ลองใหม่"', true); });
+    }).catch(function (e) {
+      fatal('เชื่อมต่อ LINE ไม่สำเร็จ กด "ลองใหม่"\n(' + ((e && (e.code || e.message)) || e) + ')', true);
+    });
+  }
+
+  /* ---------- events ---------- */
+  Array.prototype.forEach.call($('modes').children, function (b) {
+    b.addEventListener('click', function () { f.mode = b.dataset.mode; update(); });
+  });
+  ['start', 'end'].forEach(function (id) { $(id).addEventListener('change', update); $(id).addEventListener('input', update); });
+  $('reason').addEventListener('input', update);
+  $('form').addEventListener('submit', submit);
+  $('tabForm').addEventListener('click', function () { tab('form'); });
+  $('tabHist').addEventListener('click', function () { cancelOpen = ''; renderHist(); tab('hist'); });
+  $('btnGoHist').addEventListener('click', function () { renderHist(); tab('hist'); });
+  $('btnReload').addEventListener('click', function () { location.reload(); });
+  $('btnClose').addEventListener('click', function () { try { liff.closeWindow(); } catch (e) { window.close(); } });
+
+  boot();
+})();
+</script>
+</body>
+</html>
