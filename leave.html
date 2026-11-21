@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ขอลา</title>
+<title>แบบฟอร์มขอลา</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://static.line-scdn.net">
 <link rel="preload" as="script" href="https://static.line-scdn.net/liff/edge/2/sdk.js">
@@ -40,7 +40,7 @@
   button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
 
   .types { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .opt { text-align: left; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; font-weight: 600; font-size: 15px; color: var(--ink); }
+  .opt { text-align: center; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; font-weight: 600; font-size: 15px; color: var(--ink); }
   .opt small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); }
   .opt[aria-pressed="true"] { border-color: var(--navy); background: var(--sel); box-shadow: inset 0 0 0 1px var(--navy); }
   .opt:disabled { opacity: .5; cursor: not-allowed; }
@@ -109,7 +109,7 @@
 <div class="app">
   <header>
     <div class="who" id="who">กำลังเชื่อมต่อ LINE…</div>
-    <h1 id="title">ขอลา</h1>
+    <h1 id="title">แบบฟอร์มขอลา</h1>
   </header>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button type="button" role="tab" id="tabForm" aria-selected="true">ขอลา</button>
@@ -171,7 +171,7 @@
       <button type="button" class="btn ghost" id="btnGoHist">ดูวันลา &amp; ประวัติ</button>
       <button type="button" class="btn" id="btnClose">ปิดหน้านี้</button>
     </div>
-    <div class="ver">ฟอร์มลา v23</div>
+    <div class="ver">ฟอร์มลา v24</div>
   </section>
 </div>
 
@@ -245,7 +245,7 @@
     $('tabForm').setAttribute('aria-selected', String(which === 'form'));
     $('tabHist').setAttribute('aria-selected', String(which === 'hist'));
     show('form', which === 'form'); show('hist', which === 'hist'); show('done', which === 'done');
-    $('title').textContent = which === 'hist' ? 'วันลาคงเหลือ ปี ' + data.year : 'ขอลา';
+    $('title').textContent = which === 'hist' ? 'วันลาคงเหลือ ปี ' + data.year : 'แบบฟอร์มขอลา';
     window.scrollTo(0, 0);
   }
 
@@ -256,7 +256,7 @@
       var b = el('button', 'opt'); b.type = 'button';
       b.setAttribute('aria-pressed', String(f.type === t.type));
       b.appendChild(document.createTextNode(t.type));
-      b.appendChild(el('small', '', t.avail > 0 ? 'ขอได้อีก ' + fmtDays(t.avail) + (t.pending ? ' (รออนุมัติ ' + t.pending + ')' : '') : 'ใช้ครบแล้ว'));
+      b.appendChild(el('small', '', t.avail > 0 ? 'เหลืออีก ' + fmtDays(t.avail) + (t.pending ? ' (รออนุมัติ ' + t.pending + ')' : '') : 'ใช้ครบแล้ว'));
       b.disabled = !(t.avail > 0);
       b.addEventListener('click', function () { f.type = t.type; renderTypes(); update(); });
       box.appendChild(b);
@@ -282,7 +282,7 @@
     if (f.mode === 'full' && !e) return 'กรุณาเลือกวันสุดท้ายที่ลา';
     if (f.mode === 'full' && e < s) return 'วันสุดท้ายต้องไม่ก่อนวันเริ่ม';
     var t = typeInfo(f.type), n = daysOf();
-    if (t && n > t.avail) return f.type + ' ขอได้อีก ' + fmtDays(t.avail) + ' ไม่พอสำหรับ ' + fmtDays(n);
+    if (t && n > t.avail) return f.type + ' เหลืออีก ' + fmtDays(t.avail) + ' ไม่พอสำหรับ ' + fmtDays(n);
     if (isPlanned(f.type) && !f.pt) return 'กรุณาเลือกว่ามี Part Time มาแทนหรือไม่';
     if (!isPlanned(f.type) && !$('reason').value.trim()) return 'กรุณากรอกเหตุผลการลา';
     return '';
@@ -304,6 +304,7 @@
     show('advHint', planned);
     show('ptBox', !!f.type && planned);
     show('reasonBox', !!f.type && !planned);
+    $('reason').placeholder = f.type === 'ลากิจ' ? 'กรุณาระบุกิจกรรมที่ต้องใช้ลากิจ' : 'เช่น เป็นไข้ ไปพบแพทย์';
 
     var msg = missing(), n = daysOf(), t = typeInfo(f.type), sum = $('sum');
     if (f.type && f.mode && n > 0) {
